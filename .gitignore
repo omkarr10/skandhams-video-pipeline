@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.DS_Store
+results/
+*.mp4
+*.mov
+*.avi
+*.wav
+*.mkv
