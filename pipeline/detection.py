@@ -27,7 +27,9 @@ class ObjectDetector:
         self.model = YOLO(model_name)
         self.confidence = confidence
 
-    def analyze_frame(self, frame_path: str, annotated_path: Path) -> Dict[str, Any]:
+    def analyze_frame(
+        self, frame_path: str, annotated_path: Path, save_annotation: bool = True
+    ) -> Dict[str, Any]:
         results = self.model.predict(
             source=frame_path, conf=self.confidence, verbose=False, device="cpu"
         )
@@ -36,9 +38,10 @@ class ObjectDetector:
         labels = [names[int(class_id)] for class_id in result.boxes.cls.tolist()]
         people = labels.count("person")
         annotated = result.plot()
-        annotated_path.parent.mkdir(parents=True, exist_ok=True)
-        if not cv2.imwrite(str(annotated_path), annotated):
-            raise RuntimeError(f"Could not write annotated keyframe: {annotated_path}")
+        if save_annotation:
+            annotated_path.parent.mkdir(parents=True, exist_ok=True)
+            if not cv2.imwrite(str(annotated_path), annotated):
+                raise RuntimeError(f"Could not write annotated keyframe: {annotated_path}")
         return {"people": people, "objects": dict(Counter(labels))}
 
 
@@ -50,10 +53,18 @@ def analyze_shots(
     detector = ObjectDetector(model_name=model_name)
     keyframes_dir.mkdir(parents=True, exist_ok=True)
     for shot in shots:
-        keyframe = shot.frame_paths[len(shot.frame_paths) // 2]
-        output = detector.analyze_frame(
-            keyframe, keyframes_dir / f"shot_{shot.index:03d}.jpg"
-        )
+        keyframe_index = len(shot.frame_paths) // 2
+        people_counts: List[float] = []
+        object_counts: Counter[str] = Counter()
+        annotation_path = keyframes_dir / f"shot_{shot.index:03d}.jpg"
+        for frame_index, frame_path in enumerate(shot.frame_paths):
+            output = detector.analyze_frame(
+                frame_path,
+                annotation_path,
+                save_annotation=frame_index == keyframe_index,
+            )
+            people_counts.append(float(output["people"]))
+            object_counts.update(output["objects"])
         shot.keyframe = str(keyframes_dir / f"shot_{shot.index:03d}.jpg")
-        shot.people_count = float(output["people"])
-        shot.objects = output["objects"]
+        shot.people_count = sum(people_counts) / len(people_counts)
+        shot.objects = dict(object_counts)

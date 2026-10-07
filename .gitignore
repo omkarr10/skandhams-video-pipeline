@@ -4,6 +4,7 @@ __pycache__/
 .pytest_cache/
 .DS_Store
 results/
+samples/
 *.mp4
 *.mov
 *.avi

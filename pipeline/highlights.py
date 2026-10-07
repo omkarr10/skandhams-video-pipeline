@@ -8,6 +8,8 @@ import subprocess
 from pathlib import Path
 from typing import Iterable, List
 
+import cv2
+
 from pipeline.shots import Shot
 
 LOGGER = logging.getLogger(__name__)
@@ -32,6 +34,38 @@ def _ffmpeg() -> str:
     return executable
 
 
+def _caption_with_opencv(
+    video_path: Path, output_path: Path, start: float, duration: float, caption: str
+) -> None:
+    capture = cv2.VideoCapture(str(video_path))
+    fps = capture.get(cv2.CAP_PROP_FPS) or 30.0
+    width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    capture.set(cv2.CAP_PROP_POS_MSEC, start * 1000)
+    writer = cv2.VideoWriter(
+        str(output_path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height)
+    )
+    frame_count = max(1, int(duration * fps))
+    for _ in range(frame_count):
+        ok, frame = capture.read()
+        if not ok:
+            break
+        cv2.rectangle(frame, (12, height - 62), (width - 12, height - 12), (0, 0, 0), -1)
+        cv2.putText(
+            frame,
+            caption[:100],
+            (24, height - 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (255, 255, 255),
+            2,
+            cv2.LINE_AA,
+        )
+        writer.write(frame)
+    capture.release()
+    writer.release()
+
+
 def render_highlights(shots: Iterable[Shot], video_path: Path, output_path: Path) -> None:
     selected = sorted(score_shots(shots)[:3], key=lambda shot: shot.start_time)
     if not selected:
@@ -43,30 +77,70 @@ def render_highlights(shots: Iterable[Shot], video_path: Path, output_path: Path
         segment = output_path.parent / f".segment_{shot.index}.mp4"
         caption = shot.caption.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
         filter_value = f"drawtext=text='{caption}':fontcolor=white:fontsize=28:box=1:boxcolor=black@0.6:x=24:y=h-th-24"
-        subprocess.run(
-            [
-                ffmpeg,
-                "-y",
-                "-ss",
-                str(shot.start_time),
-                "-t",
-                str(max(shot.end_time - shot.start_time, 0.1)),
-                "-i",
-                str(video_path),
-                "-vf",
-                filter_value,
-                "-c:v",
-                "libx264",
-                "-c:a",
-                "aac",
-                "-movflags",
-                "+faststart",
-                str(segment),
-            ],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
+        try:
+            subprocess.run(
+                [
+                    ffmpeg,
+                    "-y",
+                    "-ss",
+                    str(shot.start_time),
+                    "-t",
+                    str(max(shot.end_time - shot.start_time, 0.1)),
+                    "-i",
+                    str(video_path),
+                    "-vf",
+                    filter_value,
+                    "-c:v",
+                    "libx264",
+                    "-c:a",
+                    "aac",
+                    "-movflags",
+                    "+faststart",
+                    str(segment),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            if "No such filter" not in exc.stderr:
+                raise
+            LOGGER.warning("FFmpeg drawtext is unavailable; using OpenCV caption fallback")
+            silent_segment = output_path.parent / f".silent_{shot.index}.mp4"
+            _caption_with_opencv(
+                video_path,
+                silent_segment,
+                shot.start_time,
+                max(shot.end_time - shot.start_time, 0.1),
+                shot.caption,
+            )
+            subprocess.run(
+                [
+                    ffmpeg,
+                    "-y",
+                    "-i",
+                    str(silent_segment),
+                    "-ss",
+                    str(shot.start_time),
+                    "-t",
+                    str(max(shot.end_time - shot.start_time, 0.1)),
+                    "-i",
+                    str(video_path),
+                    "-map",
+                    "0:v:0",
+                    "-map",
+                    "1:a:0?",
+                    "-c:v",
+                    "libx264",
+                    "-c:a",
+                    "aac",
+                    str(segment),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            silent_segment.unlink(missing_ok=True)
         segment_paths.append(segment)
     concat_file = output_path.parent / ".concat.txt"
     concat_file.write_text(

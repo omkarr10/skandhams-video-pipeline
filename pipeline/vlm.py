@@ -28,7 +28,9 @@ def _validate(payload: Any) -> Dict[str, Any]:
     return {"caption": caption.strip(), "exciting": exciting, "reason": reason.strip()}
 
 
-def fallback_understanding(objects: Dict[str, int] | None) -> Dict[str, Any]:
+def fallback_understanding(
+    objects: Optional[Dict[str, int]],
+) -> Dict[str, Any]:
     labels = sorted(objects or {}, key=lambda label: (-objects[label], label))
     subject = ", ".join(labels[:3]) if labels else "the scene"
     return {
