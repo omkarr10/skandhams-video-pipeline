@@ -50,10 +50,10 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-The detector and VLM are optional during development. The pipeline reports
-missing optional components explicitly and uses a clearly marked fallback for
-scene understanding so media and classical-vision stages remain testable on a
-CPU-only machine.
+YOLO is required for the complete pipeline. The VLM is optional: if no endpoint
+is configured, the pipeline uses a clearly marked deterministic fallback for
+scene understanding so the rest of the workflow remains testable on a CPU-only
+machine.
 
 The validation run used the open-license Wikimedia Commons clip
 [Abdominales.ogv](https://commons.wikimedia.org/wiki/File:Abdominales.ogv).
@@ -79,22 +79,31 @@ video for the final submission.
   is available; the implementation falls back to OpenCV text rendering on
   FFmpeg builds without libfreetype. Source audio is retained through each
   segment and concatenation.
+- Video-only inputs are supported; when no source audio stream exists, `audio.wav`
+  is a silent 16 kHz mono placeholder and the highlight remains video-only.
 - YOLO runs on every extracted frame in each shot. `people_count` is the
   per-shot mean; object counts are aggregated across the same frames, while the
   middle frame is saved as the annotated keyframe.
 
 ## Validation run
 
-On an Apple Silicon macOS machine (Python 3.14, CPU, `yolo11n.pt`), the
-two-minute validation input completed in **49.73 seconds** and produced 239
-analysis frames, one annotated keyframe, `summary.json`, `highlights.mp4`,
-`audio.wav`, and `normalized.mp4`. The local FFmpeg build did not expose
-`drawtext`, so the tested run used the documented OpenCV caption fallback.
+Validated on Windows with Python 3.12, CPU YOLO inference, and FFmpeg 8 using:
+
+```bash
+python main.py --input tests/test.mp4 --out tests/results/
+```
+
+The 16.7-second 3840x2160 H.264 test video completed successfully and produced
+33 analysis frames, 5 annotated keyframes, `summary.json`, `highlights.mp4`,
+`audio.wav`, and `normalized.mp4`. The input has no audio stream, so the
+pipeline created a silent 16 kHz mono WAV and produced a video-only highlight.
+The default VLM fallback was used because no endpoint was configured.
 
 ## Input source
 
-The final submission should use a royalty-free sports, street, or event clip
-from Pexels or Pixabay and record the exact source URL here.
+For the hiring submission, use a 2–5 minute royalty-free sports, street, or
+event clip from Pexels, Pixabay, or Wikimedia Commons and record its exact URL
+here. `tests/test.mp4` is only a local validation fixture.
 
 ## Known limitations
 

@@ -64,6 +64,25 @@ def probe_video(input_path: Path) -> Dict[str, Any]:
     }
 
 
+def _has_audio_stream(input_path: Path) -> bool:
+    ffprobe = _require_binary("ffprobe")
+    output = _run(
+        [
+            ffprobe,
+            "-v",
+            "error",
+            "-select_streams",
+            "a:0",
+            "-show_entries",
+            "stream=index",
+            "-of",
+            "csv=p=0",
+            str(input_path),
+        ]
+    )
+    return bool(output.strip())
+
+
 def prepare_media(input_path: Path, out_dir: Path) -> Dict[str, Any]:
     """Normalize video, extract analysis frames/audio, and persist metadata."""
 
@@ -104,22 +123,40 @@ def prepare_media(input_path: Path, out_dir: Path) -> Dict[str, Any]:
             str(frames_dir / "frame_%06d.jpg"),
         ]
     )
-    _run(
-        [
-            ffmpeg,
-            "-y",
-            "-i",
-            str(input_path),
-            "-vn",
-            "-ar",
-            "16000",
-            "-ac",
-            "1",
-            "-c:a",
-            "pcm_s16le",
-            str(audio_path),
-        ]
-    )
+    if _has_audio_stream(input_path):
+        _run(
+            [
+                ffmpeg,
+                "-y",
+                "-i",
+                str(input_path),
+                "-vn",
+                "-ar",
+                "16000",
+                "-ac",
+                "1",
+                "-c:a",
+                "pcm_s16le",
+                str(audio_path),
+            ]
+        )
+    else:
+        LOGGER.warning("Input has no audio stream; creating a silent WAV placeholder")
+        _run(
+            [
+                ffmpeg,
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "anullsrc=r=16000:cl=mono",
+                "-t",
+                str(metadata["duration_seconds"]),
+                "-c:a",
+                "pcm_s16le",
+                str(audio_path),
+            ]
+        )
 
     metadata["normalized_video"] = str(normalized_path)
     metadata["frames_dir"] = str(frames_dir)
