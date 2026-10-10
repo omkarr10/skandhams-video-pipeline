@@ -15,6 +15,30 @@ from pipeline.shots import Shot
 LOGGER = logging.getLogger(__name__)
 
 
+def _wrap_caption(
+    caption: str,
+    font_face: int,
+    font_scale: float,
+    thickness: int,
+    max_width: int,
+) -> List[str]:
+    lines: List[str] = []
+    current = ""
+    for word in caption.split():
+        candidate = f"{current} {word}".strip()
+        text_width = cv2.getTextSize(
+            candidate, font_face, font_scale, thickness
+        )[0][0]
+        if current and text_width > max_width:
+            lines.append(current)
+            current = word
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    return lines or [""]
+
+
 def score_shots(shots: Iterable[Shot]) -> List[Shot]:
     shots = list(shots)
     max_motion = max((shot.motion_score for shot in shots), default=1.0) or 1.0
@@ -46,21 +70,37 @@ def _caption_with_opencv(
         str(output_path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height)
     )
     frame_count = max(1, int(duration * fps))
+    font_face = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.8
+    thickness = 2
+    padding = 24
+    line_height = 34
+    lines = _wrap_caption(
+        caption,
+        font_face,
+        font_scale,
+        thickness,
+        max_width=width - (padding * 2),
+    )
+    box_height = (line_height * len(lines)) + padding
     for _ in range(frame_count):
         ok, frame = capture.read()
         if not ok:
             break
-        cv2.rectangle(frame, (12, height - 62), (width - 12, height - 12), (0, 0, 0), -1)
-        cv2.putText(
-            frame,
-            caption[:100],
-            (24, height - 30),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.8,
-            (255, 255, 255),
-            2,
-            cv2.LINE_AA,
-        )
+        box_top = max(0, height - box_height)
+        cv2.rectangle(frame, (12, box_top), (width - 12, height - 12), (0, 0, 0), -1)
+        for line_index, line in enumerate(lines):
+            baseline = box_top + padding + (line_index + 1) * line_height - 8
+            cv2.putText(
+                frame,
+                line,
+                (padding, baseline),
+                font_face,
+                font_scale,
+                (255, 255, 255),
+                thickness,
+                cv2.LINE_AA,
+            )
         writer.write(frame)
     capture.release()
     writer.release()

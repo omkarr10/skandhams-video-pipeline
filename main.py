@@ -8,6 +8,8 @@ import logging
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 from pipeline.detection import analyze_shots
 from pipeline.highlights import render_highlights, score_shots
 from pipeline.media import prepare_media
@@ -33,13 +35,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--vlm-endpoint",
         default=os.environ.get("VLM_ENDPOINT"),
-        help="OpenAI-compatible VLM chat-completions endpoint",
+        help="Optional OpenAI-compatible VLM endpoint; Gemini is selected via GEMINI_API_KEY",
     )
-    parser.add_argument("--vlm-model", default=os.environ.get("VLM_MODEL", "llava"))
+    parser.add_argument(
+        "--vlm-model",
+        default=os.environ.get("VLM_MODEL", os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")),
+    )
     return parser
 
 
 def main() -> int:
+    load_dotenv()
     args = build_parser().parse_args()
     logging.basicConfig(
         level=getattr(logging, args.log_level),
