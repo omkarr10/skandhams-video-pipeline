@@ -9,6 +9,15 @@ The input footage for the walkthrough/submission is sourced from
 [Pexels Videos](https://www.pexels.com/videos/). Pexels provides royalty-free
 stock video suitable for this task.
 
+## Screen recording
+
+The project walkthrough is available here:
+[Watch the screen recording](./Screen%20Recording%202026-10-10%20at%209.08.02%E2%80%AFPM.mov).
+
+GitHub does not support reliable inline playback of repository video files
+inside a README. Opening the link above uses GitHub's video/file viewer; the
+recording is also available as a Git LFS file in this repository.
+
 ## macOS setup
 
 Install Python 3.9+ and FFmpeg:
